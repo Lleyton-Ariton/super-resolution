@@ -51,7 +51,7 @@ class ResidualBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x += self.res_block(x)
+        x = torch.add(x, self.res_block(x))
 
         return x
 
@@ -87,12 +87,12 @@ class GeneratorNetwork(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_layer(x)
-        x += self.intermediate(self.residual_body(x))
+        x1 = torch.add(self.intermediate(self.residual_body(x)), x)
 
-        x = self.upsampling_body(x)
-        x = self.output_layer(x)
+        x1 = self.upsampling_body(x1)
+        x1 = self.output_layer(x1)
 
-        return x
+        return x1
 
 
 class ConvBlock(nn.Module):
@@ -112,7 +112,7 @@ class ConvBlock(nn.Module):
         self.conv_block = nn.Sequential(
             nn.Conv2d(**self.params),
             nn.BatchNorm2d(self.params['out_channels']),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True)
+            nn.LeakyReLU(negative_slope=0.2)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -121,7 +121,7 @@ class ConvBlock(nn.Module):
 
 class DiscriminatorNetwork(nn.Module):
 
-    def __init__(self, original: bool=False, pretrained: bool=True):
+    def __init__(self, original: bool=True, pretrained: bool=True):
         super().__init__()
         self.original = original
         self.pretrained = False
@@ -130,7 +130,7 @@ class DiscriminatorNetwork(nn.Module):
         flatten = nn.Flatten()
         classifier = nn.Sequential(
                 nn.Linear(512 * 14 * 14, 1024),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.LeakyReLU(negative_slope=0.2),
                 nn.Linear(1024, 1),
                 nn.Sigmoid()
             )
@@ -138,7 +138,7 @@ class DiscriminatorNetwork(nn.Module):
         if self.original:
             input_layer = nn.Sequential(
                 nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True)
+                nn.LeakyReLU(negative_slope=0.2)
             )
 
             body = []
@@ -171,3 +171,21 @@ class DiscriminatorNetwork(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.discriminator(x)
+
+
+if __name__ == '__main__':
+    from torch.optim import Adam
+
+    generator = GeneratorNetwork()
+
+    input_x = torch.ones(1, 3, 100, 100)
+    target = torch.ones(1, 3, 400, 400)
+
+    optimizer = Adam(generator.parameters())
+    criterion = nn.MSELoss()
+
+    optimizer.zero_grad()
+    loss = criterion(generator(input_x), target)
+
+    loss.backward()
+    optimizer.step()
